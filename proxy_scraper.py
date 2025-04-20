@@ -7,6 +7,7 @@ def fetch_live_proxies(url="https://proxy5.net/free-proxy"):
     }
 
     try:
+        print("[Infos] Loading proxy address, please wait...")
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
     except requests.RequestException as e:
@@ -31,6 +32,11 @@ def fetch_live_proxies(url="https://proxy5.net/free-proxy"):
 
 # Exemple d'utilisation :
 proxies = fetch_live_proxies()
-print("[Infos] Proxy lists : OK")
+print("\n[Infos] Proxy lists : OK")
 print(f"[Infos] {len(proxies)} proxies loaded.")
-print("[Infos] Rotate Circuits Proxy : Active!")
+print("[Infos] Rotate Circuits Proxy : Active!\n")
+
+# 🔎 Affichage des proxies récupérés
+print("[Debug] List of proxies:")
+for index, proxy in enumerate(proxies, 1):
+    print(f"  [{index}] {proxy}")
