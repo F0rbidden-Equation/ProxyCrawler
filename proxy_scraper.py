@@ -22,21 +22,31 @@ def fetch_live_proxies(url="https://proxy5.net/free-proxy"):
         rows = table.find_all("tr")
         for row in rows:
             cols = row.find_all("td")
-            if len(cols) >= 2:
+            if len(cols) >= 5:
                 ip = cols[0].get_text(strip=True)
                 port = cols[1].get_text(strip=True)
+                protocols = cols[2].get_text(strip=True)
+                # Récupération du pays depuis le div
+                country_tag = cols[4].find("strong")
+                country = country_tag.get_text(strip=True) if country_tag else "Unknown"
+
                 if ip.count('.') == 3 and port.isdigit():
-                    proxy_pool.append(f"{ip}:{port}")
+                    proxy_pool.append({
+                        "ip": ip,
+                        "port": port,
+                        "protocol": protocols,
+                        "country": country
+                    })
 
     return proxy_pool
 
-# Exemple d'utilisation :
+# Exemple d'utilisation
 proxies = fetch_live_proxies()
+
 print("\n[Infos] Proxy lists : OK")
 print(f"[Infos] {len(proxies)} proxies loaded.")
 print("[Infos] Rotate Circuits Proxy : Active!\n")
 
-# 🔎 Affichage des proxies récupérés
-print("[Debug] List of proxies:")
+# 🔎 Affichage test
 for index, proxy in enumerate(proxies, 1):
-    print(f"  [{index}] {proxy}")
+    print(f"[{index}] {proxy['ip']}:{proxy['port']} - {proxy['protocol']} - {proxy['country']}")
