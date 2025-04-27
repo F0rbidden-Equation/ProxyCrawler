@@ -1,16 +1,44 @@
-import requests
-from bs4 import BeautifulSoup
-import html
-import argparse
 
-# 🎨 Couleurs terminal
+import requests
+import re
+import time
+from bs4 import BeautifulSoup
+
+# 🎨 Terminal colors
 GREEN = "\033[92m"
 RED = "\033[91m"
 YELLOW = "\033[93m"
-BLUE = "\033[94m"
+CYAN = "\033[96m"
 RESET = "\033[0m"
 
-def get_proxies_from_page(page, nonce="67d2204174"):
+# 📦 Chemin du fichier proxy sauvegardé
+proxy_output = "proxy_list.txt"
+
+# ➔ 1. Obtenir un nonce dynamique
+
+def get_dynamic_nonce():
+    print(f"{CYAN}[→] Fetching homepage to extract fresh nonce...{RESET}")
+    try:
+        response = requests.get("https://proxy5.net/free-proxy", headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        response.raise_for_status()
+        html = response.text
+
+        match = re.search(r'"nonce":"([a-zA-Z0-9]+)"', html)
+        if match:
+            fresh_nonce = match.group(1)
+            print(f"{GREEN}[✓] Nonce found dynamically: {fresh_nonce}{RESET}")
+            return fresh_nonce
+        else:
+            print(f"{RED}[✗] Could not find nonce in page!{RESET}")
+            return None
+
+    except Exception as e:
+        print(f"{RED}[!] Error fetching homepage: {e}{RESET}")
+        return None
+
+# ➔ 2. Télécharger et parser les proxies pour une page
+
+def fetch_proxies_from_page(page, nonce):
     url = "https://proxy5.net/wp-admin/admin-ajax.php"
     headers = {
         "User-Agent": "Mozilla/5.0"
@@ -24,51 +52,72 @@ def get_proxies_from_page(page, nonce="67d2204174"):
         "atts[sort_by]": "-uptime"
     }
 
-    print(f"{YELLOW}[→] Scraping page {page}...{RESET}")
-    response = requests.post(url, headers=headers, data=data)
-    if response.status_code != 200:
-        print(f"{RED}[!] Failed to fetch page {page}{RESET}")
-        return []
-
+    print(f"{CYAN}[→] Scraping page {page}...{RESET}")
     try:
-        json_data = response.json()
-        html_rows = html.unescape(json_data.get("data", {}).get("rows", ""))
-    except Exception as e:
-        print(f"{RED}[!] JSON error: {e}{RESET}")
-        return []
+        response = requests.post(url, headers=headers, data=data, timeout=10)
+        response.raise_for_status()
 
-    soup = BeautifulSoup(html_rows, "html.parser")
+        json_data = response.json()
+        if 'data' in json_data and 'rows' in json_data['data']:
+            return json_data['data']['rows']
+        else:
+            print(f"{RED}[!] No rows found on page {page}.{RESET}")
+            return ""
+
+    except Exception as e:
+        print(f"{RED}[!] Error fetching page {page}: {e}{RESET}")
+        return ""
+
+# ➔ 3. Extraire IP, port et type à partir du HTML brut
+
+def parse_proxies(html_raw):
     proxies = []
+    soup = BeautifulSoup(html_raw, "html.parser")
 
     for row in soup.find_all("tr"):
         cols = row.find_all("td")
-        if len(cols) >= 5:
-            ip = cols[0].get_text(strip=True)
-            port = cols[1].get_text(strip=True)
-            protocol = cols[2].get_text(strip=True)
-            try:
-                country = cols[4].find("strong").get_text(strip=True)
-            except:
-                country = "Unknown"
+        if len(cols) >= 3:
+            ip = cols[0].text.strip()
+            port = cols[1].text.strip()
+            protocol = cols[2].text.strip()
 
+            # ➔ Ici on filtre uniquement SOCKS5 (tu peux enlever si tu veux tout)
             if "SOCKS5" in protocol.upper():
-                proxies.append({
-                    "ip": ip,
-                    "port": port,
-                    "protocol": protocol,
-                    "country": country
-                })
+                proxies.append(f"{ip}:{port}")
 
     return proxies
 
-# ▶️ Programme principal
+# ➔ 4. Main process
+
+def main():
+    print(f"{CYAN}======================================")
+    print(f"        Proxy Scraper by Amadeus")
+    print(f"======================================{RESET}\n")
+
+    pages_to_scrape = int(input("🔢 How many pages to scrape? (ex: 5): ").strip())
+
+    nonce = get_dynamic_nonce()
+    if not nonce:
+        print(f"{RED}[!] Aborting - No valid nonce.{RESET}")
+        return
+
+    all_proxies = []
+
+    for page in range(1, pages_to_scrape + 1):
+        raw_html = fetch_proxies_from_page(page, nonce)
+        if raw_html:
+            page_proxies = parse_proxies(raw_html)
+            all_proxies.extend(page_proxies)
+        time.sleep(2)
+
+    # ➔ Écraser le fichier existant
+    with open(proxy_output, "w") as f:
+        for proxy in all_proxies:
+            f.write(proxy + "\n")
+
+    print(f"\n{GREEN}✅ Scraping finished. Total proxies scraped: {len(all_proxies)}{RESET}")
+    print(f"{CYAN}Proxies saved to {proxy_output}{RESET}")
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="SOCKS5 Proxy Crawler from proxy5.net")
-    parser.add_argument("--pages", type=int, default=5, help="Number of pages to scrape (default: 5)")
-    args = parser.parse_args()
-
-    # 🧼 Vider le fichier au lancement
-    with open("proxy_list.txt", "w") as f:
-        f.write("")
-
-    print(f"{BLUE}🔎 Starting SOCKS5 proxy scan on {args.pages} pages...{RESET}\n")
+    main()
